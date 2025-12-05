@@ -52,12 +52,14 @@ extern "C" {
 
 /* The following globals are for interactions with the AppleAPIC driver, which has source code! */
 /* see https://github.com/apple-oss-distributions/AppleAPIC */
-const OSSymbol *gIOAPICDestinationIDKey;
-const OSSymbol *gIOAPICPhysicalAddressKey;
-const OSSymbol *gIOAPICBaseVectorNumberKey;
-const OSSymbol *gIOAPICIDKey;
-const OSSymbol *gIOAPICHandleSleepWakeFunction;
-const OSSymbol *gIOAPICSetVectorPhysicalDestination;
+const OSSymbol *gACPIPlatformAPICDestinationIDKey;
+const OSSymbol *gACPIPlatformAPICPhysicalAddressKey;
+const OSSymbol *gACPIPlatformAPICBaseVectorNumberKey;
+const OSSymbol *gACPIPlatformAPICIDKey;
+const OSSymbol *gACPIPlatformAPICHandleSleepWakeFunction;
+const OSSymbol *gACPIPlatformAPICSetVectorPhysicalDestination;
+const OSSymbol *gACPIPlatformInterruptSpecifiersKey;
+const OSSymbol *gACPIPlatformInterruptControllerName;
 
 PDACPICPUInterruptController *gCPUInterruptController;
 
@@ -88,36 +90,29 @@ static PDACPIPlatformExpertGlobals PDACPIPlatformExpertGlobals;
 PDACPIPlatformExpertGlobals::PDACPIPlatformExpertGlobals()
 {
     /* Setup APIC keys */
-    gIOAPICBaseVectorNumberKey = OSSymbol::withCString("Base Vector Number");
-    gIOAPICDestinationIDKey = OSSymbol::withCString("Destination APIC ID");
-    gIOAPICIDKey = OSSymbol::withCString("APIC ID");
-    gIOAPICPhysicalAddressKey = OSSymbol::withCString("Physical Address");
+    gACPIPlatformAPICBaseVectorNumberKey = OSSymbol::withCString("Base Vector Number");
+    gACPIPlatformAPICDestinationIDKey = OSSymbol::withCString("Destination APIC ID");
+    gACPIPlatformAPICIDKey = OSSymbol::withCString("APIC ID");
+    gACPIPlatformAPICPhysicalAddressKey = OSSymbol::withCString("Physical Address");
 
     /* AppleAPICInterruptController::callPlatformFunction interfaces */
-    gIOAPICHandleSleepWakeFunction = OSSymbol::withCString("HandleSleepWake");
-    gIOAPICSetVectorPhysicalDestination = OSSymbol::withCString("SetVectorPhysicalDestination");
+    gACPIPlatformAPICHandleSleepWakeFunction = OSSymbol::withCString("HandleSleepWake");
+    gACPIPlatformAPICSetVectorPhysicalDestination = OSSymbol::withCString("SetVectorPhysicalDestination");
+    
+    gACPIPlatformInterruptSpecifiersKey = OSSymbol::withCString("IOInterruptSpecifiers");
+    gACPIPlatformInterruptControllerName = OSSymbol::withCString("IOPlatformInterruptController");
 }
 
 PDACPIPlatformExpertGlobals::~PDACPIPlatformExpertGlobals()
 {
-    if (gIOAPICBaseVectorNumberKey) {
-        OSSafeReleaseNULL(gIOAPICBaseVectorNumberKey);
-    }
-    if (gIOAPICDestinationIDKey) {
-        OSSafeReleaseNULL(gIOAPICDestinationIDKey);
-    }
-    if (gIOAPICIDKey) {
-        OSSafeReleaseNULL(gIOAPICIDKey);
-    }
-    if (gIOAPICPhysicalAddressKey) {
-        OSSafeReleaseNULL(gIOAPICPhysicalAddressKey);
-    }
-    if (gIOAPICHandleSleepWakeFunction) {
-        OSSafeReleaseNULL(gIOAPICHandleSleepWakeFunction);
-    }
-    if (gIOAPICSetVectorPhysicalDestination) {
-        OSSafeReleaseNULL(gIOAPICSetVectorPhysicalDestination);
-    }
+    OSSafeReleaseNULL(gACPIPlatformInterruptControllerName);
+    OSSafeReleaseNULL(gACPIPlatformInterruptSpecifiersKey);
+    OSSafeReleaseNULL(gACPIPlatformAPICSetVectorPhysicalDestination);
+    OSSafeReleaseNULL(gACPIPlatformAPICHandleSleepWakeFunction);
+    OSSafeReleaseNULL(gACPIPlatformAPICPhysicalAddressKey);
+    OSSafeReleaseNULL(gACPIPlatformAPICIDKey);
+    OSSafeReleaseNULL(gACPIPlatformAPICDestinationIDKey);
+    OSSafeReleaseNULL(gACPIPlatformAPICBaseVectorNumberKey);
 }
 
 #pragma mark - PDACPIPlatformExpert
@@ -196,7 +191,6 @@ bool PDACPIPlatformExpert::initializeACPICA()
     this->initACPIPlane();
     
     /* By this point, we should have all CPUs defined in both IODeviceTree:/cpus and the IOACPIPlane, and the IOService plane of course. */
-    
 }
 
 //---------------------------------------------------------------------------
@@ -369,7 +363,7 @@ IOACPIPlatformDevice *PDACPIPlatformExpert::createNub(IOService *parent, ACPI_HA
     hndl->sig = PDACPI_HANDLE_SIG;
     hndl->fACPICAHandle = handle;
     
-    //nub->init(this, hndl, parent);
+    nub->init(this, hndl, nullptr);
     
     return nub;
 }

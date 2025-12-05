@@ -48,6 +48,17 @@ extern "C" {
 
 #if KERNEL && PDACPI_BUILDING_PLATFORM
 
+#include <libkern/c++/OSSymbol.h>
+
+extern const OSSymbol *gACPIPlatformAPICDestinationIDKey;
+extern const OSSymbol *gACPIPlatformAPICPhysicalAddressKey;
+extern const OSSymbol *gACPIPlatformAPICBaseVectorNumberKey;
+extern const OSSymbol *gACPIPlatformAPICIDKey;
+extern const OSSymbol *gACPIPlatformAPICHandleSleepWakeFunction;
+extern const OSSymbol *gACPIPlatformAPICSetVectorPhysicalDestination;
+extern const OSSymbol *gACPIPlatformInterruptSpecifiersKey;
+extern const OSSymbol *gACPIPlatformInterruptControllerName;
+
 /* PDACPIPlatformExpert private definitions - not for use in userspace nor by any clients */
 
 /* This is so we can store extra data in the future */

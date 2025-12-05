@@ -127,6 +127,7 @@ void PDACPICPU::haltCPU()
         processor_exit(this->machProcessor);
     } else {
         /* TODO: here, we should call into ACPICA to initiate the S<X> transaition */
+        
     }
 }
 

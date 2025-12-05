@@ -47,6 +47,7 @@ class PDACPICPUInterruptController : public IOCPUInterruptController {
     
 public:
     virtual IOReturn initCPUInterruptController(int sources) override;
+    virtual void setCPUInterruptProperties(IOService *service);
     
     virtual IOReturn getInterruptType(IOService *nub, int source, int *type) override;
     
