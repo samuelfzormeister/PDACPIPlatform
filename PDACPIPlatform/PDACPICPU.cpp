@@ -76,7 +76,7 @@ OSDefineMetaClassAndStructors(PDACPICPU, IOCPU)
  *     | +-o io-apic@fec00000  <class IOACPIPlatformDevice, id 0x100000146, registered, matched, active, busy 0 (11 ms), retain 7>
  *     | | | {
  *     | | |   "Physical Address" = 18446744073688580096                     <--- Phys Addr as reported in MADT
- *     | | |   "Vector Limit" = 112                                          <--- BVN - VL = 48, thoughts?
+ *     | | |   "Vector Limit" = 112                                          <--- This is 0x70. The max before we hit MSI territory.
  *     | | |   "InterruptControllerName" = "io-apic-0"
  *     | | |   "Destination APIC ID" = 0
  *     | | |   "Base Vector Number" = 64                                     <--- IRQ vector 'base'? Value is 64 at IOAPIC 0 then
@@ -91,15 +91,15 @@ bool PDACPICPU::start(IOService *provider)
     IOLog("PDACPICPU::start\n");
     if (!super::start(provider))
         return false;
-    
+
     /* get our freaky stuff going */
-    
+
     /* ACPIPE should hopefully feed us these values. */
     OSNumber *lapic = OSDynamicCast(OSNumber, provider->getProperty("processor-lapic"));
     OSNumber *id = OSDynamicCast(OSNumber, provider->getProperty("processor-id"));
-    
+
     /* ZORMEISTER: this is a nightmare. */
-    ml_processor_register(NULL, lapic->unsigned32BitValue(), &machProcessor, false, false);
+    ml_processor_register(NULL, lapic->unsigned32BitValue(), &machProcessor, true, true);
     
     /* ^ so when the hell do i 'boot' the CPU? when do i 'start' the CPU? */
     /* do i call ml_processor_register again? what */
@@ -137,7 +137,7 @@ void PDACPICPU::quiesceCPU() {
 
 const OSSymbol *PDACPICPU::getCPUName()
 {
-    return this->getProvider()->copyName();
+    return getProvider()->copyName();
 }
 
 kern_return_t PDACPICPU::startCPU(vm_offset_t, vm_offset_t)

@@ -36,6 +36,6 @@
 
 #include "PDACPIRTC.h"
 
-OSDefineMetaClassAndStructors(PDACPIRTC, IORTC)
+OSDefineMetaClassAndStructors(PDACPIRTC, IORTC);
 
 

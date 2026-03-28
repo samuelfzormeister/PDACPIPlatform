@@ -53,7 +53,7 @@ public:
     virtual void stop(IOService *provider) override;
     
     virtual OSObject *copyProperty(const char *property) const override;
-    
+
     /* IOACPIPlatformExpert overrides */
     virtual const OSData *getACPITableData(const char *name, UInt32 TableIndex) override;
     
@@ -106,8 +106,14 @@ public:
     virtual IOReturn setDeviceWakeEnable(IOACPIPlatformDevice * device,
                                          bool enable) override;
     
+    virtual IOReturn registerInterruptController(OSSymbol *name, IOInterruptController *interruptController) override;
+    
     /* Allowed to be public so that our ACPI CA hooks can call into it. */
     IOACPIPlatformDevice *createNub(IOService *parent, ACPI_HANDLE handle);
+    
+    virtual IOReturn assignInterrupt(IOService *toService, int source, int type, int flags);
+    
+    virtual int platformHaltRestart(UInt32 type);
 
     /* internal functions */
 private:
@@ -126,6 +132,15 @@ private:
     static ACPI_STATUS deviceNamespaceWalk(ACPI_HANDLE Handle, UInt32 NestingLevel, void *Context, void **ReturnValue);
     
     IOReturn dispatchInterrupt(int source);
+    
+    static int handlePEHaltRestart(UInt32 type);
+    
+    void createApicNub(ACPI_MADT_IO_APIC *ioapic);
+    
+    IOReturn configurePowerResource(IOACPIPlatformDevice *pwr);
+    IOReturn configureProcessor(IOACPIPlatformDevice *cpu);
+    IOReturn configureDevice(IOACPIPlatformDevice *dev);
+    IOReturn configureThermalZone(IOACPIPlatformDevice *tz);
 
 private:
     OSDictionary *m_tableDict;
@@ -137,6 +152,8 @@ private:
     void *m_smbusSpaceContext;
     IORTC *m_localRTC;
     IOPlatformExpertDevice *m_provider;
+    UInt32 m_lastIOAPICMax;
+    UInt32 m_ioApicCount;
 };
 
 #endif

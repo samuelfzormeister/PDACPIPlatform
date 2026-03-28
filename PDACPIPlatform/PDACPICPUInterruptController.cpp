@@ -45,8 +45,8 @@ OSDefineMetaClassAndStructors(PDACPICPUInterruptController, IOCPUInterruptContro
 IOReturn PDACPICPUInterruptController::initCPUInterruptController(int sources)
 {
     /* pexpert lets IOKit handle the perfmon LAPIC vector so we'll handle it here. */
-    this->m_perfmonVectors = (IOInterruptVector *)IOMalloc(sources * sizeof(IOInterruptVector));
-    
+    m_perfmonVectors = (IOInterruptVector *)IOMalloc(sources * sizeof(IOInterruptVector));
+
     return super::initCPUInterruptController(sources);
 }
 
@@ -82,15 +82,21 @@ void PDACPICPUInterruptController::setCPUInterruptProperties(IOService *service)
     service->setProperty(gIOInterruptControllersKey, irqConArray);
 }
 
+//
+// NOTES:
+//
+// XNU encodes bit 8 and higher with the logical processor number.
+//
+// XNU has claimed IRQs D0 - DF for internal functions.
+//
+// I still don't know why AppleACPICPUInterruptController claims 64 IRQs though?
+//
+// Is that to cover the initial reserved range?
+//
 IOReturn PDACPICPUInterruptController::handleInterrupt(void *refCon, IOService *nub, int source)
 {
-    if (source == 0xdf) {
-        /* this is purely for diagnostic information. */
-        kprintf("ACPICPUIC: freaky lapic number.\n");
-    }
-
     /* unserious kprintf = funny */
-    kprintf("ACPICPUIC: shots fired (src: %d)", source);
+    kprintf("ACPI: SHOTS FIRED!!! IRQ 0x%08X", source);
     
     // now preferrably this should ask PE to nicely dispatch the irq
 
@@ -102,6 +108,9 @@ IOReturn PDACPICPUInterruptController::getInterruptType(IOService *nub, int sour
     if (type == nullptr) {
         return kIOReturnBadArgument;
     } else {
+        //
+        // LINT0 interrupts are always edge IRQs.
+        //
         *type = kIOInterruptTypeEdge;
         return kIOReturnSuccess;
     }

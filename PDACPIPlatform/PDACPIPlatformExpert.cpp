@@ -54,14 +54,16 @@ extern "C" {
 /* see https://github.com/apple-oss-distributions/AppleAPIC */
 const OSSymbol *gACPIPlatformAPICDestinationIDKey;
 const OSSymbol *gACPIPlatformAPICPhysicalAddressKey;
-const OSSymbol *gACPIPlatformAPICBaseVectorNumberKey;
+const OSSymbol *gACPIPlatformBaseVectorNumberKey;
 const OSSymbol *gACPIPlatformAPICIDKey;
 const OSSymbol *gACPIPlatformAPICHandleSleepWakeFunction;
 const OSSymbol *gACPIPlatformAPICSetVectorPhysicalDestination;
 const OSSymbol *gACPIPlatformInterruptSpecifiersKey;
 const OSSymbol *gACPIPlatformInterruptControllerName;
+const OSSymbol *gACPIPlatformVectorCountKey;
 
 PDACPICPUInterruptController *gCPUInterruptController;
+PDACPIPlatformExpert *gACPIPlatformExpert;
 
 extern IOReturn AcpiStatus2IOReturn(ACPI_STATUS stat);
 
@@ -77,6 +79,12 @@ ml_processor_register(
     boolean_t       boot_cpu,
     boolean_t       start);
 
+#ifndef MAX_CPUS
+#define MAX_CPUS 64
+#endif
+
+extern "C" int cpu_to_lapic[MAX_CPUS];
+
 #pragma mark - PDACPIPlatformExpertGlobals
 
 class PDACPIPlatformExpertGlobals {
@@ -89,8 +97,8 @@ static PDACPIPlatformExpertGlobals PDACPIPlatformExpertGlobals;
 
 PDACPIPlatformExpertGlobals::PDACPIPlatformExpertGlobals()
 {
-    /* Setup APIC keys */
-    gACPIPlatformAPICBaseVectorNumberKey = OSSymbol::withCString("Base Vector Number");
+    /* Setup IRQ related keys */
+    gACPIPlatformBaseVectorNumberKey = OSSymbol::withCString("Base Vector Number");
     gACPIPlatformAPICDestinationIDKey = OSSymbol::withCString("Destination APIC ID");
     gACPIPlatformAPICIDKey = OSSymbol::withCString("APIC ID");
     gACPIPlatformAPICPhysicalAddressKey = OSSymbol::withCString("Physical Address");
@@ -150,6 +158,14 @@ bool PDACPIPlatformExpert::initializeACPICA()
         return false;
     }
 
+    //
+    // TODO: work out if im allowed to do this here
+    //
+    status = AcpiInstallInterface((char *)"Darwin");
+    if (ACPI_FAILURE(status)) {
+        kprintf("PDACPIPlatformExpert::start - [WARNING] AcpiInstallInterface failed with status %s\n", AcpiFormatException(status));
+    }
+
     status = AcpiLoadTables();
     if (ACPI_FAILURE(status)) {
         IOLog("PDACPIPlatformExpert::start - [ERROR] AcpiLoadTables failed with status %s\n", AcpiFormatException(status));
@@ -158,18 +174,14 @@ bool PDACPIPlatformExpert::initializeACPICA()
     }
     
     /* the system-type field is derived from the FADT, i think. */
-    this->m_provider->setProperty("system-type", &AcpiGbl_FADT.PreferredProfile, 1);
-    
-    /* Document all of our available tables into an OSDictionary, this will be used by IOPCIFamily (and potentially future clients?) */
-    this->catalogACPITables();
-    
-    /* Initialize IOPCIFamily and the IOMMU mapper */
-    if (!this->initPCI()) {
-        panic("ACPI: Failed to initialize PCI.");
-    }
-    
+    m_provider->setProperty("system-type", &AcpiGbl_FADT.PreferredProfile, 1);
+
     /* Initialized at PDACPIPlatformExpert::enumerateProcessors */
     gCPUInterruptController = OSTypeAlloc(PDACPICPUInterruptController);
+    
+    enumerateProcessors();
+
+    initACPIPlane();
 
     /* We can't enable the Events subsystem or IRQ subsystem yet; we need IOCPU subclasses */
     status = AcpiEnableSubsystem(ACPI_NO_EVENT_INIT | ACPI_NO_HANDLER_INIT);
@@ -187,10 +199,19 @@ bool PDACPIPlatformExpert::initializeACPICA()
         return false;
     }
     
-    /* First, enumerate the Processor namespace to get the number of available CPUs in ACPI. */
-    this->initACPIPlane();
+    kprintf("ACPI: swicthing to I/O APIC mode...\n");
     
-    /* By this point, we should have all CPUs defined in both IODeviceTree:/cpus and the IOACPIPlane, and the IOService plane of course. */
+    ACPI_OBJECT obj;
+    obj.Integer.Type = ACPI_TYPE_INTEGER;
+    obj.Integer.Value = 1;
+    ACPI_OBJECT_LIST list = {1, &obj};
+    
+    status = AcpiEvaluateObject(ACPI_ROOT_OBJECT, "\\_PIC", &list, NULL);
+    if (ACPI_FAILURE(status)) {
+        panic("ACPI: couldn't enable apic mode... %s", AcpiFormatException(status));
+    }
+    
+    return true;
 }
 
 //---------------------------------------------------------------------------
@@ -213,8 +234,8 @@ bool PDACPIPlatformExpert::initPCI()
 bool PDACPIPlatformExpert::initACPIPlane()
 {
     /* As I have discovered, objects can be set to have different names on a per-plane basis. */
-    this->m_provider->setName("acpi", gIOACPIPlane);
-    this->m_provider->attachToParent(IORegistryEntry::getRegistryRoot(), gIOACPIPlane);
+    m_provider->setName("acpi", gIOACPIPlane);
+    m_provider->attachToParent(IORegistryEntry::getRegistryRoot(), gIOACPIPlane);
     
     /* Create the CPUs set of entries for IODeviceTree + IOACPIPlane */
     IOPlatformDevice *dev = OSTypeAlloc(IOPlatformDevice);
@@ -229,12 +250,10 @@ bool PDACPIPlatformExpert::initACPIPlane()
 
         /* HACK: trick setProperty into creating an OSData */
         dev->setProperty("name", (void *)"cpus", sizeof("cpus"));
-        dev->attachToParent(this->m_provider, gIODTPlane);
-        dev->attach(this);
+        dev->attachToParent(m_provider, gIODTPlane);
         dev->registerService();
         
-        
-        this->createCPUNubs(dev);
+        createCPUNubs(dev);
     }
     
     return false;
@@ -308,12 +327,13 @@ bool PDACPIPlatformExpert::catalogACPITables()
 struct PDACPICPUWalkContext {
     PDACPIPlatformExpert *platformExpert;
     IOPlatformDevice *parent;
+    IOPlatformExpertDevice *peDev;
     UInt32 count;
 };
 
 void PDACPIPlatformExpert::createCPUNubs(IOPlatformDevice *nub)
 {
-    PDACPICPUWalkContext ctx = {this, nub};
+    PDACPICPUWalkContext ctx = {this, nub, m_provider, 0};
     
     AcpiWalkNamespace(ACPI_TYPE_PROCESSOR,
                       ACPI_ROOT_OBJECT, 1,
@@ -335,20 +355,63 @@ ACPI_STATUS PDACPIPlatformExpert::processorNamespaceWalk(ACPI_HANDLE Handle,
                                                          void *Context,
                                                          void **ReturnValue)
 {
-    ACPI_DEVICE_INFO *deviceInfo;
+    ACPI_OBJECT_TYPE type;
     PDACPICPUWalkContext *ctx = (PDACPICPUWalkContext *)Context;
     
-    AcpiGetObjectInfo(Handle, &deviceInfo);
+    AcpiGetType(Handle, &type);
     
-    switch (deviceInfo->Type) {
-        case ACPI_TYPE_PROCESSOR: {
-            break;
-        }
-        case ACPI_TYPE_DEVICE:
-            break;
-        default:
-            break;
+    if (type == ACPI_TYPE_PROCESSOR) {
+        
     }
+    
+    return AE_OK;
+}
+
+IOReturn PDACPIPlatformExpert::configureProcessor(IOACPIPlatformDevice *cpu)
+{
+    ACPI_BUFFER buf = {
+        .Length = ACPI_ALLOCATE_BUFFER,
+        .Pointer = NULL,
+    };
+
+    PDACPIHandle *hndl = (PDACPIHandle *)cpu->getDeviceHandle();
+    
+    cpu->setDeviceType(IOACPIPlatformDevice::kTypeProcessor);
+    
+    ACPI_STATUS stat = AcpiEvaluateObject(hndl->fACPICAHandle, NULL, NULL, &buf);
+    if (stat == AE_OK) {
+        ACPI_OBJECT *obj = (ACPI_OBJECT *)buf.Pointer;
+        
+        cpu->setProperty("processor-id", obj->Processor.ProcId, 32);
+        cpu->setProperty("device_type", "processor");
+        
+        //
+        // Earlier, we should have walked the MADT and enumerated I/O APICs and CPUs.
+        //
+        UInt32 size = gAPICTable->Header.Length -= sizeof(ACPI_TABLE_MADT);
+        
+        ACPI_SUBTABLE_HEADER *sub = (ACPI_SUBTABLE_HEADER *)(((uint8_t *)gAPICTable) + sizeof(ACPI_TABLE_MADT));
+        
+        while (0 != size) {
+            switch (sub->Type) {
+                case ACPI_MADT_TYPE_LOCAL_APIC: {
+                    ACPI_MADT_LOCAL_APIC *apic = (ACPI_MADT_LOCAL_APIC *)sub;
+                    if (apic->ProcessorId == obj->Processor.ProcId) {
+                        cpu->setProperty("processor-lapic", apic->Id, 32);
+                    }
+                    size -= sub->Length;
+                    sub = (ACPI_SUBTABLE_HEADER *)(((uint8_t *)sub) + sub->Length);
+                    break;
+                }
+                default:
+                    size -= sub->Length;
+                    sub = (ACPI_SUBTABLE_HEADER *)(((uint8_t *)sub) + sub->Length);
+                    break;
+            }
+        }
+    }
+    
+    return kIOReturnSuccess;
 }
 
 //---------------------------------------------------------------------------
@@ -356,14 +419,28 @@ ACPI_STATUS PDACPIPlatformExpert::processorNamespaceWalk(ACPI_HANDLE Handle,
 //---------------------------------------------------------------------------
 IOACPIPlatformDevice *PDACPIPlatformExpert::createNub(IOService *parent, ACPI_HANDLE handle)
 {
-    ACPI_DEVICE_INFO *info;
+    ACPI_OBJECT_TYPE type;
     IOACPIPlatformDevice *nub = OSTypeAlloc(IOACPIPlatformDevice);
     PDACPIHandle *hndl = (PDACPIHandle *)IOMallocZero(sizeof(PDACPIHandle));
-    
+
     hndl->sig = PDACPI_HANDLE_SIG;
     hndl->fACPICAHandle = handle;
     
-    nub->init(this, hndl, nullptr);
+    nub->init(this, hndl, NULL);
+    nub->attach(parent);
+    
+    switch (type) {
+        case ACPI_TYPE_THERMAL:
+            configureThermalZone(nub);
+            break;
+        case ACPI_TYPE_PROCESSOR:
+            configureProcessor(nub);
+            break;
+        case ACPI_TYPE_DEVICE:
+            configureDevice(nub);
+        default:
+            break;
+    }
     
     return nub;
 }
@@ -374,10 +451,11 @@ IOACPIPlatformDevice *PDACPIPlatformExpert::createNub(IOService *parent, ACPI_HA
 void PDACPIPlatformExpert::enumerateProcessors()
 {
     UInt32 processorCount;
-    processor_t proc; /* This is to avoid anything going wrong. */
+    UInt32 ioapicCount;
+    processor_t proc;       /* This is to avoid anything going wrong. */
 
     /*
-     * This function aims to provide the i386 machine_routines subsystem with an accurate count of
+     * This function aims to provide the i386 machine routines subsystem with an accurate count of
      * logical processors that are available. eg: the Enabled bit is set.
      *
      * Later down the track during IOKit matching, PDACPICPU will call into ml_register_processor again to boot and start the CPUs.
@@ -397,8 +475,6 @@ void PDACPIPlatformExpert::enumerateProcessors()
     
     UInt32 size = gAPICTable->Header.Length -= sizeof(ACPI_TABLE_MADT);
     
-    kprintf("ACPI: LAPIC Base: 0x%X\n", gAPICTable->Address);
-    
     ACPI_SUBTABLE_HEADER *sub = (ACPI_SUBTABLE_HEADER *)(((uint8_t *)gAPICTable) + sizeof(ACPI_TABLE_MADT));
     
     while (0 != size) {
@@ -413,11 +489,21 @@ void PDACPIPlatformExpert::enumerateProcessors()
                     processorCount++;
                 }
                 size -= sub->Length;
-                sub = (ACPI_SUBTABLE_HEADER *)(((uint8_t *)sub) + apic->Header.Length);
+                sub = (ACPI_SUBTABLE_HEADER *)(((uint8_t *)sub) + sub->Length);
                 break;
             }
-                
+            case ACPI_MADT_TYPE_IO_APIC: {
+                //
+                // TODO: Create I/O APIC nubs now or later?
+                //
+                ACPI_MADT_IO_APIC *ioapic = (ACPI_MADT_IO_APIC *)sub;
+                kprintf("ACPI: I/O APIC: ID: %d, 0x%08X", ioapic->Id, ioapic->Address);
+                createApicNub(ioapic);
+                break;
+            }
             default:
+                size -= sub->Length;
+                sub = (ACPI_SUBTABLE_HEADER *)(((uint8_t *)sub) + sub->Length);
                 break;
         }
     }
@@ -431,28 +517,173 @@ void PDACPIPlatformExpert::enumerateProcessors()
 //---------------------------------------------------------------------------
 void PDACPIPlatformExpert::performACPIPowerOff()
 {
-    ACPI_TABLE_FADT* fadt = getFADT();
-    if (!fadt || fadt->Pm1aControlBlock == 0)
+    AcpiEnterSleepStatePrep(ACPI_STATE_S5);
+    AcpiEnterSleepState(ACPI_STATE_S5);
+}
+
+#pragma mark - I/O APIC nub creation!!
+
+//
+// IOPCIMessagedInterruptController's base is IRQ 70h.
+//
+// Which is 112 in decimal.
+//
+// The first I/O APIC starts from IRQ0 at LAPIC vector 32.
+//
+// LAPIC vectors 0xD0 - 0xDF are reserved by OSFMK.
+//
+#define kDefaultVectorLimit 0x70
+
+void PDACPIPlatformExpert::createApicNub(ACPI_MADT_IO_APIC *ioapic)
+{
+    char name[32];
+    UInt32 destApic = 0;
+    
+    IOPlatformDevice *nub = OSTypeAlloc(IOPlatformDevice);
+    
+    bzero(name, sizeof(name));
+    snprintf(name, 32, "io-apic-%d", m_ioApicCount);
+    
+    if (ioapic->GlobalIrqBase >= 0x70) {
+        kprintf("ACPI: Skipping I/O APIC (ID: %d) to avoid IOPCIFamily conflict", ioapic->Id);
         return;
+    }
+    
+    nub->setName("io-apic");
+    nub->setProperty("APIC ID", ioapic->Id, 32);
+    nub->setProperty("Base Vector Number", m_lastIOAPICMax + ioapic->GlobalIrqBase);
+    nub->setProperty("Phyiscal Address", ioapic->Address, 32);
+    nub->setProperty("Destination APIC ID", destApic, 32);
+    nub->setProperty("InterruptControllerName", name);
+}
 
-    ACPI_OBJECT* s5Obj;
-    ACPI_BUFFER buffer = { ACPI_ALLOCATE_BUFFER, NULL };
-    if (ACPI_FAILURE(AcpiEvaluateObject(NULL, (char*)"_S5", NULL, &buffer)))
-        return;
+#pragma mark - Interrupt Handling
 
-    s5Obj = (ACPI_OBJECT*)buffer.Pointer;
-    if (!s5Obj || s5Obj->Type != ACPI_TYPE_PACKAGE || s5Obj->Package.Count < 2)
-        return;
+//
+// LAPIC: 0 - 0xFF
+//
+// assign gsis and msi as need be... ffs.
+//
+#define MAX_INTERRUPTS 512
 
-    ACPI_OBJECT elem1 = s5Obj->Package.Elements[0];
-    uint16_t slp_typ = elem1.Integer.Value & 0x7;
-    uint16_t slp_en = 1 << 13;
-    uint16_t value = (slp_typ << 10) | slp_en;
+struct {
+    IOInterruptVectorNumber src;            // source
+    IOInterruptController *controller;      // one of the i/o apics, or msi.
+    int flags;                              // active high or active low
+    int type;                               // kIOInterruptTypeXXX
+    bool assigned;                          // if assignInterrupt has been called using this vector before.
+} gInterruptTable[MAX_INTERRUPTS];
 
-    outw(fadt->Pm1aControlBlock, value);
-    if (fadt->Pm1bControlBlock)
-        outw(fadt->Pm1bControlBlock, value);
+IOReturn PDACPIPlatformExpert::assignInterrupt(IOService *toService, int source, int type, int flags)
+{
+    kprintf("ACPI: we have been asked to assign an interrupt; source: %d", source);
+    
+    if (!(gInterruptTable[source].flags & kIODTInterruptShared) &&
+        gInterruptTable[source].assigned == true) {
+        kprintf("ACPI: !!! ASSIGNING NON SHARED INTERRUPT TO ANOTHER DEVICE !!!\n");
+    }
+    
+    //
+    // We actually just directly map our IRQ source to the global dispatch table, in
+    // PDACPIPlatformExpert::registerInterruptController, so, lookup stuff here.
+    //
+    IOInterruptController *con = gInterruptTable[source].controller;
+    OSArray *controllers = OSDynamicCast(OSArray, toService->getProperty(gIOInterruptControllersKey));
+    OSArray *specifiers = OSDynamicCast(OSArray, toService->getProperty(gIOInterruptSpecifiersKey));
 
-    IOSleep(10000);
-    while (1) asm volatile("hlt");
+    if (controllers == NULL || specifiers == NULL) {
+        controllers = OSArray::withCapacity(1);
+        specifiers = OSArray::withCapacity(1);
+    } else {
+        controllers->ensureCapacity(controllers->getCapacity() + 1);
+        specifiers->ensureCapacity(specifiers->getCapacity() + 1);
+    }
+    
+    OSData *spec = OSData::withCapacity(8);
+    
+    //
+    // Violate the buffer.
+    //
+    UInt32 *sources = (UInt32 *)spec->getBytesNoCopy();
+    *sources = source;
+    
+    controllers->setObject(con->getProperty(gACPIPlatformInterruptControllerName));
+    specifiers->setObject(spec);
+    
+    gInterruptTable[source].type = type;
+    gInterruptTable[source].flags = flags;
+    gInterruptTable[source].assigned = true;
+    
+    return kIOReturnSuccess;
+}
+
+#pragma mark - dispatchInterrupt
+
+extern "C" void lapic_end_of_interrupt(void);
+
+IOReturn PDACPIPlatformExpert::dispatchInterrupt(int source)
+{
+    if (gInterruptTable[source].controller == NULL) {
+        lapic_end_of_interrupt();
+        return kIOReturnSuccess;
+    }
+    
+    return gInterruptTable[source].controller->handleInterrupt(NULL, NULL, source);
+}
+
+#pragma mark - PDACPIPlatformExpert::registerInterruptController
+
+IOReturn PDACPIPlatformExpert::registerInterruptController(OSSymbol *name, IOInterruptController *interruptController)
+{
+    IOReturn ret = kIOReturnInvalid;
+    
+    kprintf("ACPI: registering interrupt controller: %s", name->getCStringNoCopy());
+    
+    ret = super::registerInterruptController(name, interruptController);
+    if (ret != kIOReturnSuccess) {
+        return ret;
+    }
+    
+    OSNumber *vectorBase = OSDynamicCast(OSNumber, interruptController->getProperty(gACPIPlatformAPICBaseVectorNumberKey));
+    OSNumber *numVectors = OSDynamicCast(OSNumber, interruptController->getProperty(gACPIPlatformAPICIDKey));
+    
+    for (UInt32 n = vectorBase->unsigned32BitValue(); n < vectorBase->unsigned32BitValue() + numVectors->unsigned32BitValue(); n++) {
+        if (n >= 0xD0 && n <= 0xE0) {
+            //
+            // We can't assign these IDs, they're controlled used osfmk.
+            //
+            continue;
+        }
+        gInterruptTable[n].controller = interruptController;
+        gInterruptTable[n].src = n;
+    }
+    
+    return ret;
+}
+
+
+#pragma mark - handlePEHaltRestart
+
+int PDACPIPlatformExpert::handlePEHaltRestart(UInt32 type)
+{
+    return gACPIPlatformExpert->platformHaltRestart(type);
+}
+
+int PDACPIPlatformExpert::platformHaltRestart(UInt32 type)
+{
+    if (type == kPERestartCPU) {
+        kprintf("ACPI: rebooting :)\n");
+        ACPI_STATUS stat = AcpiReset();
+        kprintf("ACPI: we... didn't... reboot? (%s)\n", AcpiFormatException(stat));
+        IODelay(10000);
+        panic("ACPI: WE WERE SUPPOSED TO REBOOT.");
+    } else if (type == kPEHaltCPU) {
+        kprintf("ACPI: shutting down...\n");
+        AcpiEnterSleepStatePrep(ACPI_STATE_S5);
+        AcpiEnterSleepState(ACPI_STATE_S5);
+        kprintf("ACPI: i.. uh, wuh???\n");
+        panic("ACPI: we didn't shut down!!!");
+    }
+    
+    return -1;
 }

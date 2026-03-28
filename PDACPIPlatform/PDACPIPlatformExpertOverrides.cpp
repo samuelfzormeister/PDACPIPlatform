@@ -57,17 +57,46 @@ bool PDACPIPlatformExpert::start(IOService *provider)
         return false;
     }
     
-    this->m_provider = OSDynamicCast(IOPlatformExpertDevice, provider);
+    m_provider = OSDynamicCast(IOPlatformExpertDevice, provider);
+    
+    //
+    // initialize this here for later
+    //
+    m_lastIOAPICMax = 32;
+    m_ioApicCount = 0;
     
     /* Respond to certain boot arguemnts */
     PE_parse_boot_argn("acpi_layer", &AcpiDbgLayer, 4);
     PE_parse_boot_argn("acpi_level", &AcpiDbgLevel, 4);
 
-    if (!this->initializeACPICA()) {
+    if (!initializeACPICA()) {
+        //
+        // Realistically, if we returned false IOKit would panic anyways.
+        //
+        // It's better for debugging if we panic here though.
+        //
         panic("ACPI: ACPI CA layer failed to initialize.\n");
     }
 
-    IOLog("PDACPIPlatformExpert::start - [SUCCESS] ACPICA Initialized successfully.\n");
+    kprintf("PDACPIPlatformExpert::start - [SUCCESS] ACPICA Initialized successfully.\n");
+    
+    /* Document all of our available tables into an OSDictionary, this will be used by IOPCIFamily (and potentially future clients?) */
+    kprintf("PDACPIPlatformExpert::start - Taking the time now to process all available tables!\n");
+
+    catalogACPITables();
+    
+    /* Initialize IOPCIFamily and the IOMMU mapper */
+    if (!initPCI()) {
+        //
+        // Realistically, if we returned false IOKit would panic anyways.
+        //
+        // It's better for debugging if we panic here though.
+        //
+        panic("ACPI: Failed to initialize PCI.");
+    }
+    
+    /* By this point, we should have all CPUs defined in both IODeviceTree:/cpus and the IOACPIPlane, and the IOService plane of course. */
+    
 
     // The service should be registered after successful initialization.
     registerService();
@@ -95,7 +124,7 @@ void PDACPIPlatformExpert::stop(IOService *provider)
 OSObject *PDACPIPlatformExpert::copyProperty(const char *property) const
 {
     if (strncmp(property, "ACPI Tables", strlen(property)) == 0) {
-        return this->m_tableDict->copyCollection();
+        return m_tableDict->copyCollection();
     }
     
     return super::copyProperty(property);
@@ -199,7 +228,7 @@ void PDACPIPlatformExpert::unregisterAddressSpaceHandler(
                                             IOOptionBits)
 {
     ACPI_STATUS status = AcpiRemoveAddressSpaceHandler(device->getDeviceHandle(), spaceID, (ACPI_ADR_SPACE_HANDLER)handler);
-    
+
     if (spaceID == kIOACPIAddressSpaceIDEmbeddedController) {
         this->m_ecSpaceHandler = nullptr;
         this->m_ecSpaceContext = nullptr;
@@ -237,14 +266,14 @@ IOReturn PDACPIPlatformExpert::readAddressSpace(UInt64 *value,
             return AcpiStatus2IOReturn(AcpiOsReadPciConfiguration(&pci, address.pci.offset, value, bitWidth));
         }
         case kIOACPIAddressSpaceIDEmbeddedController:
-            if (this->m_ecSpaceHandler && this->m_ecSpaceContext) {
-                return this->m_ecSpaceHandler(kIOACPIAddressSpaceOpRead, address, value, bitWidth, bitOffset, this->m_ecSpaceContext);
+            if (m_ecSpaceHandler && m_ecSpaceContext) {
+                return m_ecSpaceHandler(kIOACPIAddressSpaceOpRead, address, value, bitWidth, bitOffset, m_ecSpaceContext);
             } else {
                 return kIOReturnNotReady;
             }
         case kIOACPIAddressSpaceIDSMBus:
-            if (this->m_smbusSpaceHandler && this->m_smbusSpaceContext) {
-                return this->m_smbusSpaceHandler(kIOACPIAddressSpaceOpRead, address, value, bitWidth, bitOffset, this->m_smbusSpaceContext);
+            if (this->m_smbusSpaceHandler && m_smbusSpaceContext) {
+                return this->m_smbusSpaceHandler(kIOACPIAddressSpaceOpRead, address, value, bitWidth, bitOffset, m_smbusSpaceContext);
             } else {
                 return kIOReturnNotReady;
             }
@@ -283,14 +312,14 @@ IOReturn PDACPIPlatformExpert::writeAddressSpace(UInt64 value,
             return AcpiStatus2IOReturn(AcpiOsWritePciConfiguration(&pci, address.pci.offset, value, bitWidth));
         }
         case kIOACPIAddressSpaceIDEmbeddedController:
-            if (this->m_ecSpaceHandler && this->m_ecSpaceContext) {
-                return this->m_ecSpaceHandler(kIOACPIAddressSpaceOpWrite, address, &value, bitWidth, bitOffset, this->m_ecSpaceContext);
+            if (m_ecSpaceHandler && m_ecSpaceContext) {
+                return m_ecSpaceHandler(kIOACPIAddressSpaceOpWrite, address, &value, bitWidth, bitOffset, m_ecSpaceContext);
             } else {
                 return kIOReturnNotReady;
             }
         case kIOACPIAddressSpaceIDSMBus:
-            if (this->m_smbusSpaceHandler && this->m_smbusSpaceContext) {
-                return this->m_smbusSpaceHandler(kIOACPIAddressSpaceOpWrite, address, &value, bitWidth, bitOffset, this->m_smbusSpaceContext);
+            if (m_smbusSpaceHandler && m_smbusSpaceContext) {
+                return m_smbusSpaceHandler(kIOACPIAddressSpaceOpWrite, address, &value, bitWidth, bitOffset, m_smbusSpaceContext);
             } else {
                 return kIOReturnNotReady;
             }

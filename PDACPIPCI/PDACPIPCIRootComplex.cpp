@@ -32,3 +32,5 @@
  */
 
 #include "PDACPIPCIRootComplex.h"
+
+OSDefineMetaClassAndStructors(PDACPIPCIRootComplex, IOPCIHostBridge);
