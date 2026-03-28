@@ -40,8 +40,6 @@
 extern "C" {
 #endif
 
-#include "acpi.h"
-
 #ifdef __cplusplus
 };
 #endif
@@ -66,7 +64,7 @@ extern const OSSymbol *gACPIPlatformInterruptControllerName;
 
 struct PDACPIHandle {
     UInt32 sig;
-    ACPI_HANDLE fACPICAHandle; /* The ACPICA handle for the object/IOACPIPlatformDevice */
+    
     
     /* Add any additional data as needed, like resources, etc. */
 };
@@ -74,22 +72,5 @@ struct PDACPIHandle {
 #else
 
 #endif
-
-#define PDACPIPLATFORMUC_TYPE 'pdac'
-
-enum PDACPIUserClientMethods {
-    kPDACPIPlatformUserClientGetTables = 1
-};
-
-struct PDACPITableDescriptor {
-    char signature[8];              /* AcpiOsGetTableByName */
-    size_t offset;                  /* Offset of the table into the collection */
-    ACPI_PHYSICAL_ADDRESS address;  /* AcpiOsGetTableByAddress */
-};
-
-struct PDACPIUCGetTableOutput {
-    size_t tableLength;
-    uint8_t table[0];
-};
 
 #endif /* _PDACPIPLATFORM_PRIVATE_H */

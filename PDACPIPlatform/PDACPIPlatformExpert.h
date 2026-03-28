@@ -37,10 +37,6 @@
 #include <IOKit/acpi/IOACPIPlatformExpert.h>
 #include <IOKit/rtc/IORTCController.h>
 
-extern "C" {
-#include "acpi.h" // For ACPICA APIs
-}
-
 class PDACPIPlatformExpert : public IOACPIPlatformExpert {
     OSDeclareDefaultStructors(PDACPIPlatformExpert);
     
@@ -105,9 +101,6 @@ public:
 
     virtual IOReturn setDeviceWakeEnable(IOACPIPlatformDevice * device,
                                          bool enable) override;
-    
-    /* Allowed to be public so that our ACPI CA hooks can call into it. */
-    IOACPIPlatformDevice *createNub(IOService *parent, ACPI_HANDLE handle);
 
     /* internal functions */
 private:
@@ -122,9 +115,6 @@ private:
     
     UInt32 getProcessorCount(void); /* used by PDACPICPU */
 
-    static ACPI_STATUS processorNamespaceWalk(ACPI_HANDLE Handle, UInt32 NestingLevel, void *Context, void **ReturnValue);
-    static ACPI_STATUS deviceNamespaceWalk(ACPI_HANDLE Handle, UInt32 NestingLevel, void *Context, void **ReturnValue);
-    
     IOReturn dispatchInterrupt(int source);
 
 private:

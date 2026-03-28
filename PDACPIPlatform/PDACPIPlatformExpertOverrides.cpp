@@ -38,14 +38,7 @@
 #include "PDACPIPlatformPrivate.h"
 #include "PDACPIPlatformExpert.h"
 
-extern "C" {
-#include "accommon.h"
-};
-
 #define super IOACPIPlatformExpert
-
-/* External declarations */
-extern IOReturn AcpiStatus2IOReturn(ACPI_STATUS stat);
 
 //---------------------------------------------------------------------------
 // PDACPIPlatformExpert::start
@@ -58,10 +51,6 @@ bool PDACPIPlatformExpert::start(IOService *provider)
     }
     
     this->m_provider = OSDynamicCast(IOPlatformExpertDevice, provider);
-    
-    /* Respond to certain boot arguemnts */
-    PE_parse_boot_argn("acpi_layer", &AcpiDbgLayer, 4);
-    PE_parse_boot_argn("acpi_level", &AcpiDbgLevel, 4);
 
     if (!this->initializeACPICA()) {
         panic("ACPI: ACPI CA layer failed to initialize.\n");
@@ -82,9 +71,6 @@ bool PDACPIPlatformExpert::start(IOService *provider)
 void PDACPIPlatformExpert::stop(IOService *provider)
 {
     IOLog("PDACPIPlatformExpert::stop\n");
-
-    /* Terminate the ACPICA layer. */
-    AcpiTerminate();
 
     super::stop(provider);
 }
@@ -130,13 +116,7 @@ IOReturn PDACPIPlatformExpert::acquireGlobalLock(IOService *client,
                                                  UInt32 *lockToken,
                                                  const mach_timespec_t *timeout)
 {
-    UInt64 time = 0;
-    
-    /* Use milliseconds over any other unit, nanoseconds and microseconds are too precise and seconds are too long for a lock. */
-    time += timeout->tv_nsec / NSEC_PER_MSEC;
-    time += timeout->tv_sec * ACPI_MSEC_PER_SEC;
-    
-    return AcpiStatus2IOReturn(AcpiAcquireGlobalLock(time, lockToken));
+    return kIOReturnUnsupported;
 }
 
 //---------------------------------------------------------------------------
@@ -145,7 +125,7 @@ IOReturn PDACPIPlatformExpert::acquireGlobalLock(IOService *client,
 void PDACPIPlatformExpert::releaseGlobalLock(IOService *client,
                                              UInt32 lockToken)
 {
-    AcpiReleaseGlobalLock(lockToken);
+
 }
 
 //---------------------------------------------------------------------------
@@ -155,15 +135,8 @@ IOReturn PDACPIPlatformExpert::validateObject(IOACPIPlatformDevice *nub,
                                               const OSSymbol *name)
 {
     PDACPIHandle *handle = (PDACPIHandle *)nub->getDeviceHandle();
-    ACPI_HANDLE caHandle;
     
-    ACPI_STATUS status = AcpiGetHandle(handle->fACPICAHandle, name->getCStringNoCopy(), &caHandle);
-    
-    if (AcpiStatus2IOReturn(status) != kIOReturnSuccess || caHandle == NULL) {
-        return kIOReturnNotFound;
-    }
-    
-    return kIOReturnSuccess;
+    return kIOReturnUnsupported;
 }
 
 //---------------------------------------------------------------------------
@@ -176,8 +149,6 @@ IOReturn PDACPIPlatformExpert::registerAddressSpaceHandler(
                                                 void *context,
                                                 IOOptionBits options)
 {
-    ACPI_STATUS status = AcpiInstallAddressSpaceHandler(device->getDeviceHandle(), spaceID, (ACPI_ADR_SPACE_HANDLER)Handler, NULL, context);
-
     if (spaceID == kIOACPIAddressSpaceIDEmbeddedController) {
         this->m_ecSpaceHandler = Handler;
         this->m_ecSpaceContext = context;
@@ -186,7 +157,7 @@ IOReturn PDACPIPlatformExpert::registerAddressSpaceHandler(
         this->m_smbusSpaceContext = context;
     }
 
-    return AcpiStatus2IOReturn(status);
+    return kIOReturnSuccess;
 }
 
 //---------------------------------------------------------------------------
@@ -198,8 +169,6 @@ void PDACPIPlatformExpert::unregisterAddressSpaceHandler(
                                             IOACPIAddressSpaceHandler handler,
                                             IOOptionBits)
 {
-    ACPI_STATUS status = AcpiRemoveAddressSpaceHandler(device->getDeviceHandle(), spaceID, (ACPI_ADR_SPACE_HANDLER)handler);
-    
     if (spaceID == kIOACPIAddressSpaceIDEmbeddedController) {
         this->m_ecSpaceHandler = nullptr;
         this->m_ecSpaceContext = nullptr;
@@ -220,6 +189,7 @@ IOReturn PDACPIPlatformExpert::readAddressSpace(UInt64 *value,
                                                 IOOptionBits options)
 {
     switch (spaceID) {
+            /*
         case kIOACPIAddressSpaceIDSystemMemory: {
             return AcpiStatus2IOReturn(AcpiOsReadMemory(address.addr64, value, bitWidth));
         }
@@ -236,6 +206,7 @@ IOReturn PDACPIPlatformExpert::readAddressSpace(UInt64 *value,
             
             return AcpiStatus2IOReturn(AcpiOsReadPciConfiguration(&pci, address.pci.offset, value, bitWidth));
         }
+             */
         case kIOACPIAddressSpaceIDEmbeddedController:
             if (this->m_ecSpaceHandler && this->m_ecSpaceContext) {
                 return this->m_ecSpaceHandler(kIOACPIAddressSpaceOpRead, address, value, bitWidth, bitOffset, this->m_ecSpaceContext);
@@ -266,6 +237,7 @@ IOReturn PDACPIPlatformExpert::writeAddressSpace(UInt64 value,
                                                  IOOptionBits options)
 {
     switch (spaceID) {
+            /*
         case kIOACPIAddressSpaceIDSystemMemory: {
             return AcpiStatus2IOReturn(AcpiOsWriteMemory(address.addr64, value, bitWidth));
         }
@@ -282,6 +254,7 @@ IOReturn PDACPIPlatformExpert::writeAddressSpace(UInt64 value,
             
             return AcpiStatus2IOReturn(AcpiOsWritePciConfiguration(&pci, address.pci.offset, value, bitWidth));
         }
+             */
         case kIOACPIAddressSpaceIDEmbeddedController:
             if (this->m_ecSpaceHandler && this->m_ecSpaceContext) {
                 return this->m_ecSpaceHandler(kIOACPIAddressSpaceOpWrite, address, &value, bitWidth, bitOffset, this->m_ecSpaceContext);

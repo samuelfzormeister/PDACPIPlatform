@@ -38,7 +38,6 @@
 
 #include <IOKit/IOService.h>
 #include <libkern/c++/OSArray.h>
-#include "acpi.h"
 
 #if __has_include(<IOKit/IOCPU.h>)
 #include <IOKit/IOCPU.h>
