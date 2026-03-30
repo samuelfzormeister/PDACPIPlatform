@@ -104,7 +104,7 @@ public:
 
     /* internal functions */
 private:
-    bool initializeACPICA(void);
+    IOReturn initializeACPI(void);
     void performACPIPowerOff(void);
     bool catalogACPITables(void);
     bool initPCI(void);
@@ -117,9 +117,10 @@ private:
 
     IOReturn dispatchInterrupt(int source);
 
-private:
-    OSDictionary *m_tableDict;
+public:
+    OSDictionary *m_acpiTables;
     
+private:
     /* PIO == ACPIPE, MMIO == ACPIPE, PCI CFG == ACPIPE, we have handlers for all of these. */
     IOACPIAddressSpaceHandler m_ecSpaceHandler;
     void *m_ecSpaceContext;

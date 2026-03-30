@@ -37,6 +37,7 @@
 
 #include "PDACPIPlatformPrivate.h"
 #include "PDACPIPlatformExpert.h"
+#include <mach/clock_types.h>
 
 #define super IOACPIPlatformExpert
 
@@ -50,13 +51,13 @@ bool PDACPIPlatformExpert::start(IOService *provider)
         return false;
     }
     
-    this->m_provider = OSDynamicCast(IOPlatformExpertDevice, provider);
+    m_provider = OSDynamicCast(IOPlatformExpertDevice, provider);
 
-    if (!this->initializeACPICA()) {
-        panic("ACPI: ACPI CA layer failed to initialize.\n");
+    if (initializeACPI() != kIOReturnSuccess) {
+        panic("ACPI: ACPI Layer failed to initialize.\n");
     }
 
-    IOLog("PDACPIPlatformExpert::start - [SUCCESS] ACPICA Initialized successfully.\n");
+    IOLog("PDACPIPlatformExpert::start - [SUCCESS] ACPI Layer Initialized successfully.\n");
 
     // The service should be registered after successful initialization.
     registerService();
@@ -81,7 +82,7 @@ void PDACPIPlatformExpert::stop(IOService *provider)
 OSObject *PDACPIPlatformExpert::copyProperty(const char *property) const
 {
     if (strncmp(property, "ACPI Tables", strlen(property)) == 0) {
-        return this->m_tableDict->copyCollection();
+        return m_acpiTables->copyCollection();
     }
     
     return super::copyProperty(property);
@@ -101,7 +102,7 @@ const OSData *PDACPIPlatformExpert::getACPITableData(const char *name,
         snprintf(tbl, 32, "%4.4s", name);
     }
 
-    OSObject *obj = this->m_tableDict->getObject(name);
+    OSObject *obj = m_acpiTables->getObject(name);
     if (obj) {
         return OSDynamicCast(OSData, obj);
     }
@@ -116,7 +117,13 @@ IOReturn PDACPIPlatformExpert::acquireGlobalLock(IOService *client,
                                                  UInt32 *lockToken,
                                                  const mach_timespec_t *timeout)
 {
-    return kIOReturnUnsupported;
+    UInt16 time = 0;
+    
+    time = timeout->tv_nsec / NSEC_PER_MSEC;
+    
+    uacpi_status status = uacpi_acquire_global_lock(time, lockToken);
+    
+    return uAcpiStatus2IOKit(status);
 }
 
 //---------------------------------------------------------------------------
@@ -125,7 +132,7 @@ IOReturn PDACPIPlatformExpert::acquireGlobalLock(IOService *client,
 void PDACPIPlatformExpert::releaseGlobalLock(IOService *client,
                                              UInt32 lockToken)
 {
-
+    uacpi_release_global_lock(lockToken);
 }
 
 //---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ extern "C" {
 #if KERNEL && PDACPI_BUILDING_PLATFORM
 
 #include <libkern/c++/OSSymbol.h>
+#include <uacpi/uacpi.h>
 
 extern const OSSymbol *gACPIPlatformAPICDestinationIDKey;
 extern const OSSymbol *gACPIPlatformAPICPhysicalAddressKey;
@@ -57,7 +58,9 @@ extern const OSSymbol *gACPIPlatformAPICSetVectorPhysicalDestination;
 extern const OSSymbol *gACPIPlatformInterruptSpecifiersKey;
 extern const OSSymbol *gACPIPlatformInterruptControllerName;
 
-/* PDACPIPlatformExpert private definitions - not for use in userspace nor by any clients */
+extern class PDACPIPlatformExpert *gACPIPlatformExpert;
+
+extern IOReturn uAcpiStatus2IOKit(uacpi_status status);
 
 /* This is so we can store extra data in the future */
 #define PDACPI_HANDLE_SIG 'pdah'
@@ -65,8 +68,8 @@ extern const OSSymbol *gACPIPlatformInterruptControllerName;
 struct PDACPIHandle {
     UInt32 sig;
     
-    
     /* Add any additional data as needed, like resources, etc. */
+    uacpi_handle layerHandle;
 };
 
 #else

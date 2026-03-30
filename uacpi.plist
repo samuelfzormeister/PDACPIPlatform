@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>OpenSourceProject</key>
+	<string>uacpi</string>
+	<key>OpenSourceVersion</key>
+	<string>4.0.0</string>
+	<key>OpenSourceWebsiteURL</key>
+	<string>https://uacpi.github.io/</string>
+	<key>OpenSourceURL</key>
+	<string>https://github.com/uACPI/uACPI/archive/refs/tags/4.0.0.zip</string>
+	<key>OpenSourceSHA1</key>
+	<string>3207d6aaa5c996ebfaec0f72f0dfe4ab0a2a015a</string>
+	<key>OpenSourceImportDate</key>
+	<string>2026-03-28</string>
+	<key>OpenSourceLicense</key>
+	<string>MIT</string>
+	<key>OpenSourceLicenseFile</key>
+	<string>uacpi.txt</string>
+</dict>
+</plist>

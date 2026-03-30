@@ -38,12 +38,19 @@
 #include "PDACPIPlatformPrivate.h"
 #include <IOKit/IOLib.h>
 #include <IOKit/IODeviceTreeSupport.h>
+#include <uacpi/tables.h>
+#include <uacpi/uacpi.h>
+
+// --- HACK: uACPI doesn't currently export a table iteration function. (Remove this when 5.0 releases) --- //
+#include <uacpi/internal/tables.h>
 
 #if __has_include(<IOKit/pci/IOPCIPrivate.h>)
 #include <IOKit/pci/IOPCIPrivate.h>
 #else
 extern IOReturn IOPCIPlatformInitialize(void);
 #endif
+
+
 
 /* The following globals are for interactions with the AppleAPIC driver, which has source code! */
 /* see https://github.com/apple-oss-distributions/AppleAPIC */
@@ -113,6 +120,24 @@ PDACPIPlatformExpertGlobals::~PDACPIPlatformExpertGlobals()
 OSDefineMetaClassAndStructors(PDACPIPlatformExpert, IOACPIPlatformExpert);
 
 //---------------------------------------------------------------------------
+// PDACPIPlatformExpert::initializeACPI
+//---------------------------------------------------------------------------
+IOReturn PDACPIPlatformExpert::initializeACPI(void)
+{
+    // --- allocate a page for uacpi's early access --- //
+    void *storage = IOMalloc(PAGE_SIZE);
+    
+    uacpi_setup_early_table_access(storage, PAGE_SIZE);
+    
+    if (catalogACPITables() == false) {
+        kprintf("ACPI: We failed to catalog the local ACPI tables.\n");
+    }
+    
+    return kIOReturnSuccess;
+}
+
+
+//---------------------------------------------------------------------------
 // PDACPIPlatformExpert::initPCI
 //---------------------------------------------------------------------------
 bool PDACPIPlatformExpert::initPCI()
@@ -159,11 +184,44 @@ bool PDACPIPlatformExpert::initACPIPlane()
     return false;
 }
 
+static uacpi_iteration_decision uacpiTableIteration(void *user, struct uacpi_installed_table *tbl, uacpi_size idx)
+{
+    static UInt32 ssdt_count = 0;
+    char buf[8];
+    
+    PDACPIPlatformExpert *expert = (PDACPIPlatformExpert *)user;
+    
+    kprintf("ACPI: processing %s", tbl->hdr.signature);
+    
+    bzero(buf, sizeof(buf));
+    
+    if (strncmp("SSDT", tbl->hdr.signature, 4) == 0) {
+        snprintf(buf, sizeof(buf), "%4.4s-%u", tbl->hdr.signature, ssdt_count);
+    } else {
+        snprintf(buf, sizeof(buf), "%4.4s", tbl->hdr.signature);
+    }
+    
+    OSData *dat = OSData::withBytes(tbl->ptr, sizeof(void *));
+    expert->m_acpiTables->setObject(buf, dat);
+    
+    OSSafeReleaseNULL(dat);
+    
+    return UACPI_ITERATION_DECISION_CONTINUE;
+}
+
 //---------------------------------------------------------------------------
 // PDACPIPlatformExpert::catalogACPITables
 //---------------------------------------------------------------------------
 bool PDACPIPlatformExpert::catalogACPITables()
 {
+    if (uacpi_table_subsystem_available() == false) {
+        kprintf("ACPI: uACPI table subsystem is unavailable -- what?\n");
+        return false;
+    }
+    
+    // --- Update this when uACPI 5.0 releases --- //
+    uacpi_for_each_table(0, &uacpiTableIteration, this);
+    
     return true;
 }
 

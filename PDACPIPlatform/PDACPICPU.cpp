@@ -124,7 +124,7 @@ void PDACPICPU::haltCPU()
     this->setCPUState(kIOCPUStateStopped);
     
     if (this->getCPUNumber() > 0) {
-        processor_exit(this->machProcessor);
+        processor_exit(machProcessor);
     } else {
         /* TODO: here, we should call into ACPICA to initiate the S<X> transaition */
         
