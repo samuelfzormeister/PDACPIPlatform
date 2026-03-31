@@ -437,8 +437,7 @@ void uacpi_kernel_signal_event(uacpi_handle sem)
 // uacpi_kernel_reset_event
 //---------------------------------------------------------------------------
 void uacpi_kernel_reset_event(uacpi_handle sem) {
-    // --- Close enough. It'll reset the counter to zero if it has hit < 0. --- //
-    semaphore_signal_all((semaphore_t)sem);
+    // --- I take that back, we can't really 'reset' a Mach semaphore. Not without modifying it. --- //
 }
 
 #pragma mark - Other Interfaces

@@ -88,6 +88,8 @@
 		F0560E9F2F77BA8D008C49FA /* uacpi_kernel_xf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F0560E9E2F77BA8D008C49FA /* uacpi_kernel_xf.cpp */; };
 		F0560EA12F77BBAF008C49FA /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = F0560EA02F77BBAF008C49FA /* README.md */; };
 		F0560EA62F788BFF008C49FA /* uAcpiStatus2IOKit.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F0560EA52F788BFF008C49FA /* uAcpiStatus2IOKit.cpp */; };
+		F07CFB292F7C549E00E313C5 /* PDACPIButtons.h in Headers */ = {isa = PBXBuildFile; fileRef = F07CFB282F7C549E00E313C5 /* PDACPIButtons.h */; };
+		F07CFB2B2F7C549E00E313C5 /* PDACPIButtons.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F07CFB2A2F7C549E00E313C5 /* PDACPIButtons.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -197,6 +199,10 @@
 		F0560EA22F77BCE4008C49FA /* uacpi.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = uacpi.plist; sourceTree = "<group>"; };
 		F0560EA42F77C0F7008C49FA /* install-license-info.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "install-license-info.sh"; sourceTree = "<group>"; };
 		F0560EA52F788BFF008C49FA /* uAcpiStatus2IOKit.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = uAcpiStatus2IOKit.cpp; sourceTree = "<group>"; };
+		F07CFB262F7C549E00E313C5 /* PDACPIButtons.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PDACPIButtons.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		F07CFB282F7C549E00E313C5 /* PDACPIButtons.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PDACPIButtons.h; sourceTree = "<group>"; };
+		F07CFB2A2F7C549E00E313C5 /* PDACPIButtons.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = PDACPIButtons.cpp; sourceTree = "<group>"; };
+		F07CFB2C2F7C549E00E313C5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -215,6 +221,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F043C1532DE30CDC00349FD5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F07CFB232F7C549E00E313C5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -260,6 +273,7 @@
 				F01A4BAF2DE13D2D00349FD5 /* PDACPIPlatform */,
 				F043C1682DE30E2E00349FD5 /* PDACPIRTC */,
 				7E5EE1362EAC8277006AF949 /* PDACPIPCI */,
+				F07CFB272F7C549E00E313C5 /* PDACPIButtons */,
 				8C084B8E2DC334D60010499B /* Products */,
 				7E6561192EA75BB50051A78A /* Frameworks */,
 			);
@@ -271,6 +285,7 @@
 				8C084B8D2DC334D60010499B /* PDACPIPlatform.kext */,
 				F043C1562DE30CDC00349FD5 /* PDACPIRTC.kext */,
 				7E5EE1352EAC8277006AF949 /* PDACPIPCIDriver.kext */,
+				F07CFB262F7C549E00E313C5 /* PDACPIButtons.kext */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -443,6 +458,16 @@
 			path = xcodescripts;
 			sourceTree = "<group>";
 		};
+		F07CFB272F7C549E00E313C5 /* PDACPIButtons */ = {
+			isa = PBXGroup;
+			children = (
+				F07CFB282F7C549E00E313C5 /* PDACPIButtons.h */,
+				F07CFB2A2F7C549E00E313C5 /* PDACPIButtons.cpp */,
+				F07CFB2C2F7C549E00E313C5 /* Info.plist */,
+			);
+			path = PDACPIButtons;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -519,6 +544,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F07CFB212F7C549E00E313C5 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F07CFB292F7C549E00E313C5 /* PDACPIButtons.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
@@ -581,6 +614,24 @@
 			productReference = F043C1562DE30CDC00349FD5 /* PDACPIRTC.kext */;
 			productType = "com.apple.product-type.kernel-extension";
 		};
+		F07CFB252F7C549E00E313C5 /* PDACPIButtons */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F07CFB2F2F7C549E00E313C5 /* Build configuration list for PBXNativeTarget "PDACPIButtons" */;
+			buildPhases = (
+				F07CFB212F7C549E00E313C5 /* Headers */,
+				F07CFB222F7C549E00E313C5 /* Sources */,
+				F07CFB232F7C549E00E313C5 /* Frameworks */,
+				F07CFB242F7C549E00E313C5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PDACPIButtons;
+			productName = PDACPIButtons;
+			productReference = F07CFB262F7C549E00E313C5 /* PDACPIButtons.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -601,6 +652,10 @@
 						CreatedOnToolsVersion = 16.3;
 						ProvisioningStyle = Automatic;
 					};
+					F07CFB252F7C549E00E313C5 = {
+						CreatedOnToolsVersion = 11.7;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 8C084B872DC334D50010499B /* Build configuration list for PBXProject "PDACPIPlatform" */;
@@ -619,6 +674,7 @@
 				8C084B8C2DC334D60010499B /* PDACPIPlatform */,
 				F043C1552DE30CDC00349FD5 /* PDACPIRTC */,
 				7E5EE1342EAC8277006AF949 /* PDACPIPCIDriver */,
+				F07CFB252F7C549E00E313C5 /* PDACPIButtons */,
 			);
 		};
 /* End PBXProject section */
@@ -643,6 +699,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				F0560EA12F77BBAF008C49FA /* README.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F07CFB242F7C549E00E313C5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -694,6 +757,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				F043C16A2DE30E2E00349FD5 /* PDACPIRTC.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F07CFB222F7C549E00E313C5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F07CFB2B2F7C549E00E313C5 /* PDACPIButtons.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -981,6 +1052,45 @@
 			};
 			name = Release;
 		};
+		F07CFB2D2F7C549E00E313C5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = PDACPIButtons/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MODULE_NAME = org.puredarwin.driver.PDACPIButtons;
+				MODULE_VERSION = 1.0.0d1;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = org.puredarwin.driver.PDACPIButtons;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		F07CFB2E2F7C549E00E313C5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = PDACPIButtons/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MODULE_NAME = org.puredarwin.driver.PDACPIButtons;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_BUNDLE_IDENTIFIER = org.puredarwin.driver.PDACPIButtons;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1016,6 +1126,15 @@
 			buildConfigurations = (
 				F043C15F2DE30CDC00349FD5 /* Debug */,
 				F043C1602DE30CDC00349FD5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F07CFB2F2F7C549E00E313C5 /* Build configuration list for PBXNativeTarget "PDACPIButtons" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F07CFB2D2F7C549E00E313C5 /* Debug */,
+				F07CFB2E2F7C549E00E313C5 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
