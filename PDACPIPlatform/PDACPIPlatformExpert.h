@@ -37,6 +37,8 @@
 #include <IOKit/acpi/IOACPIPlatformExpert.h>
 #include <IOKit/rtc/IORTCController.h>
 
+#include "PDACPIPlatformPrivate.h"
+
 class PDACPIPlatformExpert : public IOACPIPlatformExpert {
     OSDeclareDefaultStructors(PDACPIPlatformExpert);
     
@@ -101,6 +103,12 @@ public:
 
     virtual IOReturn setDeviceWakeEnable(IOACPIPlatformDevice * device,
                                          bool enable) override;
+    
+    // --- public so that handlePEHaltRestart can call into it. --- //
+    int platformHaltRestart(UInt32 type);
+    
+    // --- public so uacpi_kernel_xf.cpp can use it. --- //
+    IOReturn installInterruptForAcpi(IOInterruptSource irq, void *context);
 
     /* internal functions */
 private:
@@ -112,9 +120,16 @@ private:
     void systemStateChange(void);
     void enumerateProcessors(void);
     bool initACPIPlane(void);
-    
-    UInt32 getProcessorCount(void); /* used by PDACPICPU */
 
+    UInt32 getProcessorCount(void); /* used by PDACPICPU */
+    
+    static int handlePEHaltRestart(UInt32 type);
+    
+    void createApicNub(acpi_madt_ioapic *ioapic);
+
+    uacpi_iteration_decision enumerateProcessors(uacpi_namespace_node *node, uacpi_u32 depth);
+    
+public:
     IOReturn dispatchInterrupt(int source);
 
 public:
@@ -128,6 +143,7 @@ private:
     void *m_smbusSpaceContext;
     IORTC *m_localRTC;
     IOPlatformExpertDevice *m_provider;
+    UInt32 m_numProcessors;
 };
 
 #endif

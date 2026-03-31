@@ -40,6 +40,7 @@
 #include <IOKit/IODeviceTreeSupport.h>
 #include <uacpi/tables.h>
 #include <uacpi/uacpi.h>
+#include <uacpi/utilities.h>
 
 // --- HACK: uACPI doesn't currently export a table iteration function. (Remove this when 5.0 releases) --- //
 #include <uacpi/internal/tables.h>
@@ -133,6 +134,26 @@ IOReturn PDACPIPlatformExpert::initializeACPI(void)
         kprintf("ACPI: We failed to catalog the local ACPI tables.\n");
     }
     
+    if (initPCI() == false) {
+        kprintf("ACPI: Failed to init PCI.\n");
+    }
+    
+    // --- begin uACPI initialisation at this point --- //
+    uacpi_status stat = uacpi_initialize(0);
+    if (stat != UACPI_STATUS_OK) {
+        kprintf("ACPI: uACPI failed initilisation step #1: %s", uacpi_status_to_string(stat));
+        return uAcpiStatus2IOKit(stat);
+    }
+    
+    stat = uacpi_namespace_load();
+    if (stat != UACPI_STATUS_OK) {
+        kprintf("ACPI: uACPI failed initilisation step #2: %s", uacpi_status_to_string(stat));
+        return uAcpiStatus2IOKit(stat);
+    }
+    
+    // --- at this point we have what we need to create the IOACPIPlane. --- //
+    initACPIPlane();
+    
     return kIOReturnSuccess;
 }
 
@@ -157,8 +178,8 @@ bool PDACPIPlatformExpert::initPCI()
 bool PDACPIPlatformExpert::initACPIPlane()
 {
     /* As I have discovered, objects can be set to have different names on a per-plane basis. */
-    this->m_provider->setName("acpi", gIOACPIPlane);
-    this->m_provider->attachToParent(IORegistryEntry::getRegistryRoot(), gIOACPIPlane);
+    m_provider->setName("acpi", gIOACPIPlane);
+    m_provider->attachToParent(IORegistryEntry::getRegistryRoot(), gIOACPIPlane);
     
     /* Create the CPUs set of entries for IODeviceTree + IOACPIPlane */
     IOPlatformDevice *dev = OSTypeAlloc(IOPlatformDevice);
@@ -173,7 +194,7 @@ bool PDACPIPlatformExpert::initACPIPlane()
 
         /* HACK: trick setProperty into creating an OSData */
         dev->setProperty("name", (void *)"cpus", sizeof("cpus"));
-        dev->attachToParent(this->m_provider, gIODTPlane);
+        dev->attachToParent(m_provider, gIODTPlane);
         dev->attach(this);
         dev->registerService();
         
@@ -226,16 +247,55 @@ bool PDACPIPlatformExpert::catalogACPITables()
 }
 
 //---------------------------------------------------------------------------
+// PDACPIPlatformExpert::enumerateProcessors
+//---------------------------------------------------------------------------
+uacpi_iteration_decision PDACPIPlatformExpert::enumerateProcessors(uacpi_namespace_node *node, uacpi_u32 depth)
+{
+    bool val;
+    
+    if (uacpi_namespace_node_is(node, UACPI_OBJECT_PROCESSOR, &val) == UACPI_STATUS_OK) {
+        if (val == true) {
+            uacpi_processor_info pi;
+            
+            uacpi_object *obj = uacpi_namespace_node_get_object(node);
+            
+            uacpi_object_get_processor_info(obj, &pi);
+            
+            kprintf("ACPI: found Processor %d", pi.id);
+            
+            // --- This is where we would create the processor node (and map it to it's Local APIC ID). --- //
+        } else {
+            if (uacpi_namespace_node_is(node, UACPI_OBJECT_DEVICE, &val) == UACPI_STATUS_OK) {
+                if (val == true) {
+                    const char *hids[] = {"ACPI0007"};
+                    if (uacpi_device_matches_pnp_id(node, hids)) {
+                        uacpi_id_string *uid;
+                        uacpi_eval_uid(node, &uid);
+                        
+                        // --- another TODO... convert 2 integer & build processor node. --- //
+                    }
+                }
+            }
+        }
+    }
+    
+    
+    return UACPI_ITERATION_DECISION_CONTINUE;
+}
+
+//---------------------------------------------------------------------------
 // PDACPIPlatformExpert::createCPUNubs
 //---------------------------------------------------------------------------
-
-struct PDACPICPUWalkContext {
-    PDACPIPlatformExpert *platformExpert;
-    IOPlatformDevice *parent;
-    UInt32 count;
-};
-
 void PDACPIPlatformExpert::createCPUNubs(IOPlatformDevice *nub)
 {
-    PDACPICPUWalkContext ctx = {this, nub};
+    uacpi_object_type_bits bits = (uacpi_object_type_bits)(UACPI_OBJECT_PROCESSOR_BIT | UACPI_OBJECT_DEVICE_BIT);
+    
+    OSMemberFunctionCast(uacpi_iteration_callback, this, &PDACPIPlatformExpert::enumerateProcessors);
+    uacpi_namespace_for_each_child(uacpi_namespace_root(),
+                                   OSMemberFunctionCast(uacpi_iteration_callback, this, &PDACPIPlatformExpert::enumerateProcessors),
+                                   NULL,
+                                   bits,
+                                   UACPI_MAX_DEPTH_ANY, this);
+    
+    
 }

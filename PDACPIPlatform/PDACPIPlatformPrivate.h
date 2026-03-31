@@ -47,6 +47,7 @@ extern "C" {
 #if KERNEL && PDACPI_BUILDING_PLATFORM
 
 #include <libkern/c++/OSSymbol.h>
+#include <uacpi/acpi.h>
 #include <uacpi/uacpi.h>
 
 extern const OSSymbol *gACPIPlatformAPICDestinationIDKey;

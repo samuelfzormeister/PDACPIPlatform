@@ -238,7 +238,6 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
     IOSleep((UInt32)msec);
 };
 
-
 #pragma mark - Thread Management Interface
 
 //---------------------------------------------------------------------------
@@ -390,6 +389,57 @@ void uacpi_kernel_unlock_spinlock(uacpi_handle lock, uacpi_cpu_flags flags) {
     IOSimpleLockUnlock((IOSimpleLock *)lock);
     ml_set_interrupts_enabled((boolean_t)flags);
 };
+
+#pragma mark - Event Interface
+
+//---------------------------------------------------------------------------
+// uacpi_kernel_create_event
+//---------------------------------------------------------------------------
+uacpi_handle uacpi_kernel_create_event(void)
+{
+    semaphore_t sem;
+    
+    semaphore_create(current_task(), &sem, 0, 0);
+    
+    return sem;
+}
+
+//---------------------------------------------------------------------------
+// uacpi_kernel_free_event
+//---------------------------------------------------------------------------
+void uacpi_kernel_free_event(uacpi_handle sem) {
+    semaphore_destroy(current_task(), (semaphore_t)sem);
+}
+
+//---------------------------------------------------------------------------
+// uacpi_kernel_wait_for_event
+//---------------------------------------------------------------------------
+uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle sem, uacpi_u16 ms)
+{
+    uint64_t abs;
+    nanoseconds_to_absolutetime(ms * NSEC_PER_MSEC, &abs);
+    clock_absolutetime_interval_to_deadline(abs, &abs);
+    
+    auto res = semaphore_wait_deadline((semaphore_t)sem, abs);
+    
+    return (res == KERN_SUCCESS);
+}
+
+//---------------------------------------------------------------------------
+// uacpi_kernel_signal_event
+//---------------------------------------------------------------------------
+void uacpi_kernel_signal_event(uacpi_handle sem)
+{
+    semaphore_signal((semaphore_t)sem);
+}
+
+//---------------------------------------------------------------------------
+// uacpi_kernel_reset_event
+//---------------------------------------------------------------------------
+void uacpi_kernel_reset_event(uacpi_handle sem) {
+    // --- Close enough. It'll reset the counter to zero if it has hit < 0. --- //
+    semaphore_signal_all((semaphore_t)sem);
+}
 
 #pragma mark - Other Interfaces
 
