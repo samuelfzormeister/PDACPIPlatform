@@ -39,6 +39,8 @@
 #include "PDACPIPlatformExpert.h"
 #include <mach/clock_types.h>
 
+PDACPIPlatformExpert *gACPIPlatformExpert = NULL;
+
 #define super IOACPIPlatformExpert
 
 //---------------------------------------------------------------------------
@@ -50,6 +52,8 @@ bool PDACPIPlatformExpert::start(IOService *provider)
         IOLog("PDACPIPlatformExpert::start - super::start failed\n");
         return false;
     }
+    
+    gACPIPlatformExpert = this;
     
     m_provider = OSDynamicCast(IOPlatformExpertDevice, provider);
 

@@ -30,6 +30,8 @@
 
 // --- This is the uACPI interface between PDACPIPlatform and itself. --- //
 
+#include "PDACPIPlatformPrivate.h"
+#include "PDACPIPlatformExpert.h"
 #include <IOKit/IODeviceTreeSupport.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOMemoryDescriptor.h>
@@ -38,11 +40,11 @@
 #include <kern/thread_call.h>
 #include <pexpert/i386/efi.h>
 #include <stdarg.h>
+#include <uacpi/acpi.h>
 #include <uacpi/kernel_api.h>
 
 /*
  * TODO:
- *  - uACPI event system
  *  - System I/O and PCI access
  *  - IRQ handler installation
  */
@@ -77,6 +79,10 @@ struct AcpiMemoryTag {
     UInt32 magic;
     IOByteCount size;
 };
+
+// --- PCI I/O access variables --- //
+static IOPhysicalAddress64 gAcpiPciBaseAddress;
+static OSArray *gAcpiPciBaseAddressesArray;
 
 //---------------------------------------------------------------------------
 // uacpi_kernel_intialize
@@ -116,6 +122,9 @@ uacpi_status uacpi_kernel_initialize(uacpi_init_level current_init_lvl)
         gAcpiMemoryMapLock = IOLockAlloc();
         gAcpiMemoryMapSet = OSSet::withCapacity(4);
         gAcpiMemoryMapIterator = OSCollectionIterator::withCollection(gAcpiMemoryMapSet);
+        
+        const OSData *mcfgTable = gACPIPlatformExpert->getACPITableData("MCFG", 0);
+        acpi_mcfg *mcfg = (acpi_mcfg *)mcfgTable->getBytesNoCopy();
         
         
     }
@@ -392,23 +401,35 @@ void uacpi_kernel_unlock_spinlock(uacpi_handle lock, uacpi_cpu_flags flags) {
 
 #pragma mark - Event Interface
 
+struct uAcpiEventInterfaceHandle {
+    semaphore_t semaphore;
+};
+
 //---------------------------------------------------------------------------
 // uacpi_kernel_create_event
 //---------------------------------------------------------------------------
 uacpi_handle uacpi_kernel_create_event(void)
 {
-    semaphore_t sem;
+    uAcpiEventInterfaceHandle *evt = (uAcpiEventInterfaceHandle *)IOMalloc(sizeof(uAcpiEventInterfaceHandle));
     
-    semaphore_create(current_task(), &sem, 0, 0);
+    kern_return_t ret = semaphore_create(current_task(), &evt->semaphore, 0, 0);
     
-    return sem;
+    if (ret == KERN_SUCCESS) {
+        return evt;
+    } else {
+        uacpi_kernel_log(UACPI_LOG_ERROR, "evtxf: mach did not create semaphore.\n");
+        IOFree(evt, sizeof(uAcpiEventInterfaceHandle));
+        return NULL;
+    }
 }
 
 //---------------------------------------------------------------------------
 // uacpi_kernel_free_event
 //---------------------------------------------------------------------------
 void uacpi_kernel_free_event(uacpi_handle sem) {
-    semaphore_destroy(current_task(), (semaphore_t)sem);
+    uAcpiEventInterfaceHandle *evt = (uAcpiEventInterfaceHandle *)sem;
+    semaphore_destroy(current_task(), evt->semaphore);
+    IOFree(evt, sizeof(uAcpiEventInterfaceHandle));
 }
 
 //---------------------------------------------------------------------------
@@ -416,11 +437,12 @@ void uacpi_kernel_free_event(uacpi_handle sem) {
 //---------------------------------------------------------------------------
 uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle sem, uacpi_u16 ms)
 {
+    uAcpiEventInterfaceHandle *evt = (uAcpiEventInterfaceHandle *)sem;
     uint64_t abs;
     nanoseconds_to_absolutetime(ms * NSEC_PER_MSEC, &abs);
     clock_absolutetime_interval_to_deadline(abs, &abs);
     
-    auto res = semaphore_wait_deadline((semaphore_t)sem, abs);
+    auto res = semaphore_wait_deadline(evt->semaphore, abs);
     
     return (res == KERN_SUCCESS);
 }
@@ -430,14 +452,22 @@ uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle sem, uacpi_u16 ms)
 //---------------------------------------------------------------------------
 void uacpi_kernel_signal_event(uacpi_handle sem)
 {
-    semaphore_signal((semaphore_t)sem);
+    uAcpiEventInterfaceHandle *evt = (uAcpiEventInterfaceHandle *)sem;
+    semaphore_signal(evt->semaphore);
 }
 
 //---------------------------------------------------------------------------
 // uacpi_kernel_reset_event
 //---------------------------------------------------------------------------
 void uacpi_kernel_reset_event(uacpi_handle sem) {
-    // --- I take that back, we can't really 'reset' a Mach semaphore. Not without modifying it. --- //
+    uAcpiEventInterfaceHandle *evt = (uAcpiEventInterfaceHandle *)sem;
+    
+    if (semaphore_destroy(current_task(), evt->semaphore) == KERN_SUCCESS) {
+        kern_return_t ret = semaphore_create(current_task(), &evt->semaphore, 0, 0);
+        if (ret != KERN_SUCCESS) {
+            uacpi_kernel_log(UACPI_LOG_ERROR, "evtxf: mach did not create semaphore.\n");
+        }
+    }
 }
 
 #pragma mark - Other Interfaces
